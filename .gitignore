@@ -376,3 +376,5 @@ appsettings.Production.json
 appsettings.Staging.json
 /appsettings.Development.json
 /appsettings.json
+/appsettings.json
+/appsettings.Development.json
