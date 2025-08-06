@@ -1,0 +1,110 @@
+### Lima Voice Assistant - Тестовые запросы
+
+### 1. Создание брони в аптеку
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "Создай бронь в аптеку Нурафшон на Парацетамол — 5 упаковок, предоплата 100%, оплата наличными",
+  "sessionId": "test-session-001"
+}
+
+###
+
+### 2. Фиксация визита в ЛПУ
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "Сегодня зашёл в клинику МедиГранд, поговорил с доктором Ахмедовой и презентовал препараты Парацетамол и Ибупрофен",
+  "sessionId": "test-session-002"
+}
+
+###
+
+### 3. История визитов
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "Покажи мою историю визитов за последнее время",
+  "sessionId": "test-session-003"
+}
+
+###
+
+### 4. Поиск организации
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "Найди аптеку Нурафшон",
+  "sessionId": "test-session-004"
+}
+
+###
+
+### 5. План визитов на пятницу
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "Какие у меня визиты запланированы на пятницу?",
+  "sessionId": "test-session-005"
+}
+
+###
+
+### 6. Проверка остатков препарата
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "Сколько Парацетамола есть на складе?",
+  "sessionId": "test-session-006"
+}
+
+###
+
+### 7. Команда отмены
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "отмена",
+  "sessionId": "test-session-007"
+}
+
+###
+
+### 8. Получение справки
+GET https://localhost:5001/api/assistant/help
+
+###
+
+### 9. Проверка здоровья сервиса
+GET https://localhost:5001/health
+
+###
+
+### 10. Контекстный диалог - Создание брони по частям
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "Создай бронь в аптеку Нурафшон",
+  "sessionId": "context-test-001"
+}
+
+###
+
+### 11. Продолжение контекстного диалога
+POST https://localhost:5001/api/assistant/query
+Content-Type: application/json
+
+{
+  "message": "Парацетамол 5 упаковок",
+  "sessionId": "context-test-001"
+}
+
+###
