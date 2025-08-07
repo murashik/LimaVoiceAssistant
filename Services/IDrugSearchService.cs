@@ -47,4 +47,10 @@ public interface IDrugSearchService
     /// <param name="maxResults">Максимальное количество результатов (по умолчанию 10)</param>
     /// <returns>Список наиболее похожих препаратов</returns>
     Task<List<PriceListItem>> SearchSimilarDrugsAsync(string partialName, int threshold = 50, int maxResults = 10);
+
+    /// <summary>
+    /// Получение остатков всех препаратов из прайс-листа
+    /// </summary>
+    /// <returns>Список всех препаратов с остатками</returns>
+    Task<List<PriceListItem>> GetAllDrugBalancesAsync();
 }

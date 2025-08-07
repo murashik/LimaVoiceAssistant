@@ -104,7 +104,7 @@ try
 
     // Middleware
     app.UseCors();
-    app.UseHttpsRedirection();
+    //app.UseHttpsRedirection();
     app.UseRouting();
 
     // Health check endpoint

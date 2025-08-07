@@ -264,7 +264,7 @@ public class LimaApiClient : ILimaApiClient
         {
             _logger.Info("Получение количества визитов по датам месяца");
             
-            var response = await _httpClient.GetAsync("/plans/month", cancellationToken);
+            var response = await _httpClient.GetAsync("visits/plans/month", cancellationToken);
             response.EnsureSuccessStatusCode();
             
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -292,7 +292,7 @@ public class LimaApiClient : ILimaApiClient
         {
             _logger.Info($"Получение запланированных визитов на дату: {date}");
             
-            var response = await _httpClient.GetAsync($"/plans/current?date={date}", cancellationToken);
+            var response = await _httpClient.GetAsync($"visits/plans/current?date={date}", cancellationToken);
             response.EnsureSuccessStatusCode();
             
             var json = await response.Content.ReadAsStringAsync(cancellationToken);

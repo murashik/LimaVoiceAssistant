@@ -56,28 +56,64 @@ public class PageInfo
 public class Doctor
 {
     /// <summary>
+    /// Статус посещения врача
+    /// </summary>
+    [JsonProperty("visited")]
+    public bool Visited { get; set; }
+
+    /// <summary>
+    /// Избранный врач
+    /// </summary>
+    [JsonProperty("favorite")]
+    public bool Favorite { get; set; }
+
+    /// <summary>
     /// Идентификатор врача
     /// </summary>
-    [JsonProperty("doctor_id")]
-    public int DoctorId { get; set; }
+    [JsonProperty("id")]
+    public int Id { get; set; }
 
     /// <summary>
     /// ФИО врача
     /// </summary>
-    [JsonProperty("doctor_name")]
-    public string DoctorName { get; set; } = string.Empty;
+    [JsonProperty("full_name")]
+    public string FullName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Идентификатор должности
+    /// </summary>
+    [JsonProperty("position_id")]
+    public int PositionId { get; set; }
 
     /// <summary>
     /// Должность врача
     /// </summary>
-    [JsonProperty("doctor_position")]
-    public string? DoctorPosition { get; set; }
+    [JsonProperty("position")]
+    public string Position { get; set; } = string.Empty;
 
     /// <summary>
     /// Телефон врача
     /// </summary>
-    [JsonProperty("doctor_phone")]
-    public string? DoctorPhone { get; set; }
+    [JsonProperty("phone")]
+    public string Phone { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Комментарий
+    /// </summary>
+    [JsonProperty("comment")]
+    public string? Comment { get; set; }
+
+    /// <summary>
+    /// Название региона
+    /// </summary>
+    [JsonProperty("region_name")]
+    public string RegionName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Идентификатор региона
+    /// </summary>
+    [JsonProperty("region_id")]
+    public int RegionId { get; set; }
 }
 
 /// <summary>

@@ -69,6 +69,51 @@ public class DrugSearchService : IDrugSearchService
     }
 
     /// <summary>
+    /// Транслитерация текста из латиницы в кириллицу
+    /// </summary>
+    private string TransliterateLatin2Cyrillic(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        var map = new Dictionary<char, char>
+        {
+            {'a', 'а'}, {'b', 'б'}, {'v', 'в'}, {'g', 'г'}, {'d', 'д'}, {'e', 'е'}, {'z', 'з'},
+            {'i', 'и'}, {'k', 'к'}, {'l', 'л'}, {'m', 'м'}, {'n', 'н'}, {'o', 'о'}, {'p', 'п'},
+            {'r', 'р'}, {'s', 'с'}, {'t', 'т'}, {'u', 'у'}, {'f', 'ф'}, {'h', 'х'}, {'c', 'ц'},
+            {'y', 'ы'}, {'A', 'А'}, {'B', 'Б'}, {'V', 'В'}, {'G', 'Г'}, {'D', 'Д'}, {'E', 'Е'}, 
+            {'Z', 'З'}, {'I', 'И'}, {'K', 'К'}, {'L', 'Л'}, {'M', 'М'}, {'N', 'Н'}, {'O', 'О'}, 
+            {'P', 'П'}, {'R', 'Р'}, {'S', 'С'}, {'T', 'Т'}, {'U', 'У'}, {'F', 'Ф'}, {'H', 'Х'}, 
+            {'C', 'Ц'}, {'Y', 'Ы'}
+        };
+
+        return new string(text.Select(c => map.ContainsKey(c) ? map[c] : c).ToArray());
+    }
+
+    /// <summary>
+    /// Транслитерация текста из кириллицы в латиницу
+    /// </summary>
+    private string TransliterateCyrillic2Latin(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        // Сначала обрабатываем многосимвольные замены
+        text = text.Replace("я", "ya").Replace("Я", "Ya");
+        
+        var map = new Dictionary<char, char>
+        {
+            {'а', 'a'}, {'б', 'b'}, {'в', 'v'}, {'г', 'g'}, {'д', 'd'}, {'е', 'e'}, {'з', 'z'},
+            {'и', 'i'}, {'й', 'y'}, {'к', 'k'}, {'л', 'l'}, {'м', 'm'}, {'н', 'n'}, {'о', 'o'}, 
+            {'п', 'p'}, {'р', 'r'}, {'с', 's'}, {'т', 't'}, {'у', 'u'}, {'ф', 'f'}, {'х', 'h'}, 
+            {'ц', 'c'}, {'ы', 'y'}, {'э', 'e'}, {'А', 'A'}, {'Б', 'B'}, {'В', 'V'}, {'Г', 'G'}, 
+            {'Д', 'D'}, {'Е', 'E'}, {'З', 'Z'}, {'И', 'I'}, {'Й', 'Y'}, {'К', 'K'}, {'Л', 'L'}, 
+            {'М', 'M'}, {'Н', 'N'}, {'О', 'O'}, {'П', 'P'}, {'Р', 'R'}, {'С', 'S'}, {'Т', 'T'}, 
+            {'У', 'U'}, {'Ф', 'F'}, {'Х', 'H'}, {'Ц', 'C'}, {'Ы', 'Y'}, {'Э', 'E'}
+        };
+
+        return new string(text.Select(c => map.ContainsKey(c) ? map[c] : c).ToArray());
+    }
+
+    /// <summary>
     /// Нормализация названия препарата для лучшего поиска
     /// </summary>
     /// <param name="drugName">Исходное название</param>
@@ -79,9 +124,12 @@ public class DrugSearchService : IDrugSearchService
             return string.Empty;
 
         // Приводим к нижнему регистру и удаляем лишние пробелы
-        return drugName.Trim().ToLowerInvariant()
+        var normalized = drugName.Trim().ToLowerInvariant()
             .Replace("ё", "е") // Замена ё на е для лучшего поиска
             .Replace("  ", " "); // Удаление двойных пробелов
+
+        // Транслитерируем всё в латиницу для лучшей работы FuzzySharp
+        return TransliterateCyrillic2Latin(normalized);
     }
 
     /// <summary>
@@ -122,20 +170,17 @@ public class DrugSearchService : IDrugSearchService
                 }
 
                 // Проверяем содержание подстроки
-                if (normalizedDrugName.Contains(normalizedSearchName) || normalizedSearchName.Contains(normalizedDrugName))
+                if (normalizedDrugName.Contains(normalizedSearchName))
                 {
                     _logger.Info($"Найдено совпадение по подстроке: '{item.Drug.DrugName}'");
                     return item;
                 }
 
-                // Используем нечёткий поиск
+                // Используем нечёткий поиск FuzzySharp
                 var score = Fuzz.Ratio(normalizedSearchName, normalizedDrugName);
-                
-                // Также проверяем частичные совпадения
                 var partialScore = Fuzz.PartialRatio(normalizedSearchName, normalizedDrugName);
                 var tokenScore = Fuzz.TokenSortRatio(normalizedSearchName, normalizedDrugName);
                 
-                // Берём максимальный из всех скоров
                 var maxScore = Math.Max(score, Math.Max(partialScore, tokenScore));
 
                 if (maxScore > bestScore && maxScore >= threshold)
@@ -337,6 +382,28 @@ public class DrugSearchService : IDrugSearchService
         catch (Exception ex)
         {
             _logger.Error(ex, $"Ошибка при поиске похожих препаратов по названию '{partialName}'");
+            return new List<PriceListItem>();
+        }
+    }
+
+    /// <summary>
+    /// Получение остатков всех препаратов из прайс-листа
+    /// </summary>
+    /// <returns>Список всех препаратов с остатками</returns>
+    public async Task<List<PriceListItem>> GetAllDrugBalancesAsync()
+    {
+        try
+        {
+            _logger.Info("Получение остатков всех препаратов");
+            
+            var priceList = await GetPriceListAsync();
+            
+            _logger.Info($"Получено препаратов: {priceList.Count}");
+            return priceList;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Ошибка при получении остатков всех препаратов");
             return new List<PriceListItem>();
         }
     }

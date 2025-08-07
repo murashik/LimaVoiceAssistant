@@ -273,7 +273,7 @@ public class OpenAIService : IOpenAIService
             new OpenAIFunction
             {
                 Name = "getDrugStock",
-                Description = "Проверка остатков препарата на складе. Используется когда спрашивают о наличии, остатках, количестве препарата.",
+                Description = "Проверка остатков препарата на складе. Используется когда спрашивают о наличии, остатках, количестве препарата. Если drugName не указан, показывает все остатки.",
                 Parameters = new FunctionParameter
                 {
                     Type = "object",
@@ -282,10 +282,10 @@ public class OpenAIService : IOpenAIService
                         ["drugName"] = new FunctionParameter
                         {
                             Type = "string",
-                            Description = "Название препарата для проверки остатков"
+                            Description = "Название препарата для проверки остатков. Если не указано, показывает остатки всех препаратов."
                         }
                     },
-                    Required = new List<string> { "drugName" }
+                    Required = new List<string>()
                 }
             }
         };
@@ -513,7 +513,7 @@ public class OpenAIService : IOpenAIService
 
     private async Task<string> ExecuteGetDrugStock(Dictionary<string, object> arguments)
     {
-        var drugName = arguments.GetValueOrDefault("drugName")?.ToString() ?? "";
+        var drugName = arguments.GetValueOrDefault("drugName")?.ToString();
         return await _limaFunctionsService.GetDrugStockAsync(drugName);
     }
 

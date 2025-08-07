@@ -3,6 +3,8 @@ using LimaVoiceAssistant.Models;
 using NLog;
 using System.Globalization;
 using System.Text;
+using FuzzySharp;
+using FuzzySharp.SimilarityRatio;
 
 namespace LimaVoiceAssistant.Services;
 
@@ -88,8 +90,9 @@ public class LimaFunctionsService : ILimaFunctionsService
                 }
             }
 
-            // 4. Определение типа оплаты
-            var paymentVariantId = paymentType.ToLowerInvariant().Contains("наличн") ? 2 : 1;
+            // 4. Определение типа оплаты (по умолчанию - перечисление)
+            var paymentVariantId = !string.IsNullOrWhiteSpace(paymentType) && 
+                                   paymentType.ToLowerInvariant().Contains("наличн") ? 2 : 1;
 
             // 5. Создание заявки
             var visitRequest = new CreateVisitRequest
@@ -159,24 +162,38 @@ public class LimaFunctionsService : ILimaFunctionsService
                 return $"❌ ЛПУ '{clinicName}' не найдено. Проверьте название и попробуйте снова.";
             }
 
-            // 2. Поиск врача (если указан)
+            // 2. Проверка обязательности указания врача
+            if (string.IsNullOrWhiteSpace(doctorName))
+            {
+                return "❌ Для создания визита необходимо указать врача. Пожалуйста, назовите имя врача.";
+            }
+
+            // 3. Поиск врача с использованием FuzzySharp для нечёткого поиска
             int? doctorId = null;
             Doctor? foundDoctor = null;
             
-            if (!string.IsNullOrWhiteSpace(doctorName))
+            var doctors = await _limaApiClient.GetOrganizationDoctorsAsync(clinic.Id);
+            
+            if (doctors.Count > 0)
             {
-                var doctors = await _limaApiClient.GetOrganizationDoctorsAsync(clinic.Id);
-                foundDoctor = doctors.FirstOrDefault(d => 
-                    d.DoctorName.Contains(doctorName, StringComparison.OrdinalIgnoreCase));
-                doctorId = foundDoctor?.DoctorId;
+                // Используем FuzzySharp для поиска наиболее похожего имени
+                var bestMatch = Process.ExtractOne(doctorName, doctors.Select(d => d.FullName));
                 
-                if (foundDoctor == null)
+                // Если совпадение больше 70%, считаем что нашли врача
+                if (bestMatch.Score >= 70)
                 {
-                    _logger.Warn($"Врач '{doctorName}' не найден в ЛПУ '{clinicName}'");
+                    foundDoctor = doctors.First(d => d.FullName == bestMatch.Value);
+                    doctorId = foundDoctor.Id;
+                    _logger.Info($"Найден врач '{foundDoctor.FullName}' с точностью {bestMatch.Score}% для запроса '{doctorName}'");
+                }
+                else
+                {
+                    _logger.Warn($"Врач '{doctorName}' не найден в ЛПУ '{clinicName}'. Лучшее совпадение: '{bestMatch.Value}' ({bestMatch.Score}%)");
                 }
             }
+            
 
-            // 3. Поиск препаратов компании
+            // 4. Поиск препаратов компании
             var talkedAboutDrugs = new List<TalkedAboutDrug>();
             var notFoundDrugs = new List<string>();
 
@@ -199,7 +216,7 @@ public class LimaFunctionsService : ILimaFunctionsService
                 }
             }
 
-            // 4. Создание визита
+            // 5. Создание визита
             var visitRequest = new CreateVisitRequest
             {
                 OrganizationId = clinic.Id,
@@ -222,9 +239,9 @@ public class LimaFunctionsService : ILimaFunctionsService
                 
                 if (foundDoctor != null)
                 {
-                    result.AppendLine($"👨‍⚕️ Врач: {foundDoctor.DoctorName}");
-                    if (!string.IsNullOrEmpty(foundDoctor.DoctorPosition))
-                        result.AppendLine($"📝 Должность: {foundDoctor.DoctorPosition}");
+                    result.AppendLine($"👨‍⚕️ Врач: {foundDoctor.FullName}");
+                    if (!string.IsNullOrEmpty(foundDoctor.Position))
+                        result.AppendLine($"📝 Должность: {foundDoctor.Position}");
                 }
                 else if (!string.IsNullOrWhiteSpace(doctorName))
                 {
@@ -305,7 +322,7 @@ public class LimaFunctionsService : ILimaFunctionsService
                 
                 if (visit.Doctor != null)
                 {
-                    result.AppendLine($"👨‍⚕️ {visit.Doctor.DoctorName}");
+                    result.AppendLine($"👨‍⚕️ {visit.Doctor.FullName}");
                 }
 
                 // Препараты в зависимости от типа визита
@@ -462,7 +479,7 @@ public class LimaFunctionsService : ILimaFunctionsService
                     
                     if (visit.Doctor != null)
                     {
-                        result.AppendLine($"👨‍⚕️ {visit.Doctor.DoctorName} ({visit.Doctor.DoctorPosition})");
+                        result.AppendLine($"👨‍⚕️ {visit.Doctor.FullName} ({visit.Doctor.Position})");
                     }
                     
                     result.AppendLine();
@@ -479,15 +496,67 @@ public class LimaFunctionsService : ILimaFunctionsService
     }
 
     /// <summary>
-    /// Получение остатков препарата по названию
+    /// Получение остатков препарата по названию или всех препаратов
     /// </summary>
-    public async Task<string> GetDrugStockAsync(string drugName)
+    public async Task<string> GetDrugStockAsync(string? drugName = null)
     {
         try
         {
+            // Если название не указано, показываем все остатки
+            if (string.IsNullOrWhiteSpace(drugName))
+            {
+                _logger.Info("Получение остатков всех препаратов");
+                
+                var allDrugs = await _drugSearchService.GetAllDrugBalancesAsync();
+                
+                if (allDrugs.Count == 0)
+                {
+                    return "❌ Прайс-лист пуст или недоступен.";
+                }
+
+                var result = new StringBuilder();
+                result.AppendLine($"📋 Остатки всех препаратов ({allDrugs.Count}):");
+                result.AppendLine();
+
+                // Сортируем по названию и показываем первые 20
+                var drugsToShow = allDrugs
+                    .OrderBy(d => d.Drug.DrugName)
+                    .Take(20)
+                    .ToList();
+
+                foreach (var drug in drugsToShow)
+                {
+                    var stockStatus = drug.ActualBalance > 10 ? "✅" : drug.ActualBalance > 0 ? "⚠️" : "❌";
+                    result.AppendLine($"{stockStatus} {drug.Drug.DrugName} — {drug.ActualBalance} уп.");
+                    
+                    if (drug.Price.HasValue)
+                        result.Append($" (цена: {drug.Price:F2} сум)");
+                    result.AppendLine();
+                }
+
+                if (allDrugs.Count > 20)
+                {
+                    result.AppendLine($"\n... и ещё {allDrugs.Count - 20} препаратов");
+                    result.AppendLine("Для поиска конкретного препарата укажите его название.");
+                }
+
+                // Общая статистика
+                var inStock = allDrugs.Count(d => d.ActualBalance > 0);
+                var lowStock = allDrugs.Count(d => d.ActualBalance > 0 && d.ActualBalance <= 10);
+                var outOfStock = allDrugs.Count(d => d.ActualBalance == 0);
+                
+                result.AppendLine($"\n📊 Статистика:");
+                result.AppendLine($"✅ В наличии: {inStock}");
+                result.AppendLine($"⚠️ Мало: {lowStock} (≤10 уп.)");
+                result.AppendLine($"❌ Нет в наличии: {outOfStock}");
+
+                return result.ToString();
+            }
+
+            // Поиск конкретного препарата
             _logger.Info($"Получение остатков препарата: '{drugName}'");
 
-            var foundDrug = await _drugSearchService.FindDrugInPriceListAsync(drugName);
+            var foundDrug = await _drugSearchService.FindDrugInPriceListAsync(drugName, 60);
             
             if (foundDrug == null)
             {
@@ -504,7 +573,8 @@ public class LimaFunctionsService : ILimaFunctionsService
                 
                 foreach (var drug in similarDrugs)
                 {
-                    result.AppendLine($"💊 {drug.Drug.DrugName} — остаток: {drug.ActualBalance} уп.");
+                    var stockStatus = drug.ActualBalance > 10 ? "✅" : drug.ActualBalance > 0 ? "⚠️" : "❌";
+                    result.AppendLine($"{stockStatus} {drug.Drug.DrugName} — остаток: {drug.ActualBalance} уп.");
                 }
 
                 return result.ToString();
@@ -512,7 +582,9 @@ public class LimaFunctionsService : ILimaFunctionsService
             else
             {
                 var result = new StringBuilder();
-                result.AppendLine($"💊 {foundDrug.Drug.DrugName}");
+                var stockStatus = foundDrug.ActualBalance > 10 ? "✅" : foundDrug.ActualBalance > 0 ? "⚠️" : "❌";
+                
+                result.AppendLine($"{stockStatus} {foundDrug.Drug.DrugName}");
                 result.AppendLine($"📦 Остаток: {foundDrug.ActualBalance} упаковок");
                 
                 if (foundDrug.Drug.Quantity.HasValue)
